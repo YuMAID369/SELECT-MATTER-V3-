@@ -1,0 +1,225 @@
+-- [[ PROJETO KILL BOBSLED - MULTI-SELECTION (FORCE INJECTED - OMNI ORBIT) ]] --
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+local character = lp.Character or lp.CharacterAdded:Wait()
+local camera = Workspace.CurrentCamera
+local mouse = lp:GetMouse()
+
+-- --- VARIÁVEIS DE ESTADO ---
+local objetosSelecionados = {} -- Tabela para armazenar múltiplos objetos
+local conexaoAtaque = nil
+
+-- --- TRANCAR AUTORIDADE DE REDE (SIMULATION RADIUS MÁXIMO) ---
+local sethp = sethiddenproperty or set_hidden_property
+if sethp then
+    task.spawn(function()
+        RunService.RenderStepped:Connect(function()
+            pcall(function()
+                sethp(lp, "SimulationRadius", 1e30)
+                sethp(lp, "MaxSimulationRadius", 1e30)
+            end)
+        end)
+    end)
+end
+
+-- --- CRIAÇÃO DA TOOL ---
+local tool = Instance.new("Tool")
+tool.Name = "SELECT MATTER V3"
+tool.RequiresHandle = false
+tool.Parent = lp:WaitForChild("Backpack")
+
+-- --- INJEÇÃO DOS MOTORES DE FORÇA BRUTA (MÉTODO FLING BALL) ---
+local function aplicarMotoresFling(corpo)
+    for _, child in pairs(corpo:GetChildren()) do
+        if child:IsA("BodyVelocity") or child:IsA("BodyAngularVelocity") or child.Name == "BobsledSpinMotor" then
+            child:Destroy()
+        end
+    end
+
+    corpo.CanCollide = true
+    corpo.Massless = false
+
+    corpo.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 0, 100, 100)
+    local forcaMassiva = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
+
+    -- 1. MOTOR LINEAR
+    local velocity = Instance.new("BodyVelocity")
+    velocity.Name = "FlingPowerLinear"
+    velocity.Velocity = Vector3.new(999999, 999999, 999999)
+    velocity.MaxForce = forcaMassiva
+    velocity.P = math.huge
+    velocity.Parent = corpo  
+
+    -- 2. MOTOR ANGULAR
+    local angularVelocity = Instance.new("BodyAngularVelocity")
+    angularVelocity.Name = "FlingPowerAngular"
+    angularVelocity.AngularVelocity = Vector3.new(999999, 999999, 999999)
+    angularVelocity.MaxTorque = forcaMassiva
+    angularVelocity.P = math.huge
+    angularVelocity.Parent = corpo
+end
+
+-- --- EXECUÇÃO DO ATAQUE EM MASSA ---
+local function iniciarAtaqueMassa(alvoPlayer)
+    local alvoChar = alvoPlayer.Character
+    if not alvoChar or not alvoChar:FindFirstChild("HumanoidRootPart") then return end
+
+    local alvoHRP = alvoChar.HumanoidRootPart
+    local alvoHum = alvoChar.Humanoid
+    local meuHRP = character:FindFirstChild("HumanoidRootPart")
+
+    if not meuHRP or #objetosSelecionados == 0 then return end
+
+    print("⚔️ INJETANDO MULTI-FLING EM: " .. alvoPlayer.Name .. " COM " .. #objetosSelecionados .. " OBJETOS.")
+
+    -- Prepara todos os objetos selecionados para o ataque
+    for _, objeto in pairs(objetosSelecionados) do
+        if objeto and objeto.Parent then
+            aplicarMotoresFling(objeto)
+
+            -- Restrição local para evitar auto-fling
+            local nc = Instance.new("NoCollisionConstraint", objeto)
+            nc.Part0 = objeto
+            nc.Part1 = meuHRP
+
+            -- Forçar a propriedade de rede em lote
+            if sethp then
+                pcall(function() sethp(objeto, "NetworkOwner", lp) end)
+            elseif objeto.SetNetworkOwner then
+                pcall(function() objeto:SetNetworkOwner(lp) end)
+            end
+        end
+    end
+
+    local partesAlvo = {"HumanoidRootPart", "Head", "LowerTorso"}
+    local indexParte = 1
+
+    -- Loop de frames físicos (Ataque simultâneo de toda a matéria selecionada)
+    conexaoAtaque = RunService.Heartbeat:Connect(function()
+        -- Verifica se o alvo ainda é válido
+        if not alvoChar.Parent or alvoHum.Health <= 0 or #objetosSelecionados == 0 then
+            if conexaoAtaque then conexaoAtaque:Disconnect() end
+            print("💥 Alvo neutralizado ou lista vazia. Resetando.")
+            objetosSelecionados = {}
+            tool.Name = "SELECT MATTER V3"
+            return
+        end
+
+        local nomeParte = partesAlvo[indexParte]
+        local p = alvoChar:FindFirstChild(nomeParte)
+
+        if p then
+            -- Antecipação cirúrgica de física
+            local offsetCurto = Vector3.new(0, 0, 0)
+            if p.Velocity.Magnitude > 0.1 then
+                offsetCurto = p.Velocity.Unit * 0.8
+            end
+
+            -- Variável de tempo para criar a oscilação de órbita contínua e estável
+            local tempo = tick() * 45 
+
+            -- Move todos os objetos da lista para a posição calculada de forma sobreposta
+            for i = #objetosSelecionados, 1, -1 do
+                local objeto = objetosSelecionados[i]
+                
+                if objeto and objeto.Parent then
+                    -- Modificadores orbitais baseados no índice do objeto para eles não irem exatamente pro mesmo spot
+                    local angulo = tempo + (i * (math.pi / #objetosSelecionados))
+                    
+                    -- Calcula um raio dinâmico variando de forma agressiva entre 1 e 2 studs
+                    local raio = 1 + (math.sin(tempo + i) * 0.5 + 0.5) 
+
+                    -- Criação do deslocamento de órbita esférica caótica (X, Y, Z) ao redor do osso/parte do alvo
+                    local offsetOrbital = Vector3.new(
+                        math.cos(angulo) * raio,
+                        math.sin(angulo * 1.5) * raio, -- Eixo Y oscilando para cobrir cima e baixo
+                        math.sin(angulo) * raio
+                    )
+
+                    -- Definição final de CFrame estável + Rotação de torque extremo nativa
+                    local posicaoFinal = p.Position + offsetCurto + offsetOrbital
+                    local direcaoGiro = CFrame.Angles(math.sin(tempo) * 3, math.cos(tempo) * 3, math.sin(tempo * 2) * 3)
+                    
+                    objeto.CFrame = CFrame.new(posicaoFinal) * direcaoGiro
+                    
+                    -- Alimentação contínua de velocidades massivas para simulação replicar
+                    objeto.Velocity = Vector3.new(999999, 999999, 999999)
+                    objeto.RotVelocity = Vector3.new(999999, 999999, 999999)
+                else
+                    -- Remove da lista caso o objeto seja destruído/despawns durante o ataque
+                    table.remove(objetosSelecionados, i)
+                end
+            end
+        end
+
+        indexParte = indexParte + 1
+        if indexParte > #partesAlvo then indexParte = 1 end
+    end)
+end
+
+-- --- GATILHO DE RECONHECIMENTO E SELEÇÃO ---
+tool.Activated:Connect(function()
+    local unitRay = camera:ScreenPointToRay(mouse.X, mouse.Y)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {character}
+
+    local raycastResult = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 50000, raycastParams)
+
+    if raycastResult and raycastResult.Instance then
+        local hitPart = raycastResult.Instance
+        local model = hitPart:FindFirstAncestorOfClass("Model")
+
+        -- CONDICIONAL: É um jogador? (Inicia o ataque se houver matéria selecionada)
+        if model and model:FindFirstChild("Humanoid") then
+            local tPlayer = Players:GetPlayerFromCharacter(model)
+
+            if tPlayer and tPlayer ~= lp then
+                if #objetosSelecionados > 0 then
+                    if conexaoAtaque then conexaoAtaque:Disconnect() end
+                    iniciarAtaqueMassa(tPlayer)
+                else
+                    warn("❌ Nenhuma matéria selecionada ainda! Clique em objetos físicos primeiro.")
+                end
+            end
+        else
+            -- CONDICIONAL: É um objeto/veículo (Adiciona à tabela de alvos secundários)
+            local alvoFisico = nil
+            local modeloVeiculo = hitPart:FindFirstAncestorOfClass("Model") or hitPart
+
+            if hitPart.Anchored == false then
+                if hitPart:IsA("BasePart") then
+                    alvoFisico = hitPart
+                elseif modeloVeiculo:IsA("Model") and modeloVeiculo.PrimaryPart then
+                    alvoFisico = modeloVeiculo.PrimaryPart
+                else
+                    alvoFisico = hitPart
+                end
+            end
+
+            if alvoFisico then
+                -- Evita duplicar o mesmo objeto se clicar nele duas vezes
+                if not table.find(objetosSelecionados, alvoFisico) then
+                    table.insert(objetosSelecionados, alvoFisico)
+                    print("➕ MATÉRIA ADICIONADA: " .. alvoFisico.Name .. " (Total: " .. #objetosSelecionados .. ")")
+                    tool.Name = "DESTROY " .. #objetosSelecionados
+                end
+            else
+                -- Clique no mapa vazio ou objeto ancorado reseta a lista
+                print("♻️ Seleção limpa.")
+                objetosSelecionados = {}
+                tool.Name = "SELECT MATTER V3"
+                if conexaoAtaque then conexaoAtaque:Disconnect() end
+            end
+        end
+    end
+end)
+
+tool.Unequipped:Connect(function()
+    if conexaoAtaque then conexaoAtaque:Disconnect() end
+    objetosSelecionados = {}
+    tool.Name = "SELECT MATTER V3"
+end)
