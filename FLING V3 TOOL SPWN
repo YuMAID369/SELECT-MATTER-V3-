@@ -1,4 +1,4 @@
--- [[ PROJETO KILL BOBSLED - MULTI-SELECTION (FORCE INJECTED - OMNI ORBIT) ]] --
+-- [[ PROJETO KILL V3 - MULTI-SELECTION (FORCE INJECTED - OMNI ORBIT) ]] --
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -62,6 +62,35 @@ local function aplicarMotoresFling(corpo)
     angularVelocity.Parent = corpo
 end
 
+-- --- MÓDULO 5: SEAT-HOPPING DINÂMICO (PEGA A POSIÇÃO ATUAL DO ASSENTO) ---
+local function executarBypassNetworkOwnership(assentoAlvo)
+    local meuHRP = character:FindFirstChild("HumanoidRootPart")
+    local meuHum = character:FindFirstChildOfClass("Humanoid")
+    if not meuHRP or not meuHum or not assentoAlvo then return end
+
+    -- Salva o ponto seguro onde você estava antes do clique
+    local posicaoOriginal = meuHRP.CFrame
+
+    print("⚡ [CUBNIT] Passo 1: Teletransportando para a posição ATUAL do assento...")
+    meuHRP.CFrame = assentoAlvo.CFrame
+    
+    -- PASSO 1: Tempo necessário para o motor sincronizar e herdar o controle físico
+    task.wait(0.5) 
+
+    print("⚡ [CUBNIT] Passo 2: Forçando saída mecânica do veículo...")
+    meuHum.Sit = false
+    meuHum.Jump = true -- Destrói a solda interna nativa do Roblox
+    
+    -- Move o personagem para cima para sair completamente da hitbox do helicóptero
+    meuHRP.CFrame = assentoAlvo.CFrame + Vector3.new(0, 8, 0) 
+    
+    -- PASSO 2: Tempo de espera para o servidor confirmar que você se desvinculou do assento
+    task.wait(0.3) 
+
+    print("✅ [CUBNIT] Passo 3: Retornando em segurança para a posição de origem.")
+    meuHRP.CFrame = posicaoOriginal
+end
+
 -- --- EXECUÇÃO DO ATAQUE EM MASSA ---
 local function iniciarAtaqueMassa(alvoPlayer)
     local alvoChar = alvoPlayer.Character
@@ -75,17 +104,14 @@ local function iniciarAtaqueMassa(alvoPlayer)
 
     print("⚔️ INJETANDO MULTI-FLING EM: " .. alvoPlayer.Name .. " COM " .. #objetosSelecionados .. " OBJETOS.")
 
-    -- Prepara todos os objetos selecionados para o ataque
     for _, objeto in pairs(objetosSelecionados) do
         if objeto and objeto.Parent then
             aplicarMotoresFling(objeto)
 
-            -- Restrição local para evitar auto-fling
             local nc = Instance.new("NoCollisionConstraint", objeto)
             nc.Part0 = objeto
             nc.Part1 = meuHRP
 
-            -- Forçar a propriedade de rede em lote
             if sethp then
                 pcall(function() sethp(objeto, "NetworkOwner", lp) end)
             elseif objeto.SetNetworkOwner then
@@ -97,9 +123,7 @@ local function iniciarAtaqueMassa(alvoPlayer)
     local partesAlvo = {"HumanoidRootPart", "Head", "LowerTorso"}
     local indexParte = 1
 
-    -- Loop de frames físicos (Ataque simultâneo de toda a matéria selecionada)
     conexaoAtaque = RunService.Heartbeat:Connect(function()
-        -- Verifica se o alvo ainda é válido
         if not alvoChar.Parent or alvoHum.Health <= 0 or #objetosSelecionados == 0 then
             if conexaoAtaque then conexaoAtaque:Disconnect() end
             print("💥 Alvo neutralizado ou lista vazia. Resetando.")
@@ -112,44 +136,34 @@ local function iniciarAtaqueMassa(alvoPlayer)
         local p = alvoChar:FindFirstChild(nomeParte)
 
         if p then
-            -- Antecipação cirúrgica de física
             local offsetCurto = Vector3.new(0, 0, 0)
             if p.Velocity.Magnitude > 0.1 then
                 offsetCurto = p.Velocity.Unit * 0.8
             end
 
-            -- Variável de tempo para criar a oscilação de órbita contínua e estável
             local tempo = tick() * 45 
 
-            -- Move todos os objetos da lista para a posição calculada de forma sobreposta
             for i = #objetosSelecionados, 1, -1 do
                 local objeto = objetosSelecionados[i]
-                
+
                 if objeto and objeto.Parent then
-                    -- Modificadores orbitais baseados no índice do objeto para eles não irem exatamente pro mesmo spot
                     local angulo = tempo + (i * (math.pi / #objetosSelecionados))
-                    
-                    -- Calcula um raio dinâmico variando de forma agressiva entre 1 e 2 studs
                     local raio = 1 + (math.sin(tempo + i) * 0.5 + 0.5) 
 
-                    -- Criação do deslocamento de órbita esférica caótica (X, Y, Z) ao redor do osso/parte do alvo
                     local offsetOrbital = Vector3.new(
                         math.cos(angulo) * raio,
-                        math.sin(angulo * 1.5) * raio, -- Eixo Y oscilando para cobrir cima e baixo
+                        math.sin(angulo * 1.5) * raio, 
                         math.sin(angulo) * raio
                     )
 
-                    -- Definição final de CFrame estável + Rotação de torque extremo nativa
                     local posicaoFinal = p.Position + offsetCurto + offsetOrbital
                     local direcaoGiro = CFrame.Angles(math.sin(tempo) * 3, math.cos(tempo) * 3, math.sin(tempo * 2) * 3)
-                    
+
                     objeto.CFrame = CFrame.new(posicaoFinal) * direcaoGiro
-                    
-                    -- Alimentação contínua de velocidades massivas para simulação replicar
+
                     objeto.Velocity = Vector3.new(999999, 999999, 999999)
                     objeto.RotVelocity = Vector3.new(999999, 999999, 999999)
                 else
-                    -- Remove da lista caso o objeto seja destruído/despawns durante o ataque
                     table.remove(objetosSelecionados, i)
                 end
             end
@@ -173,7 +187,7 @@ tool.Activated:Connect(function()
         local hitPart = raycastResult.Instance
         local model = hitPart:FindFirstAncestorOfClass("Model")
 
-        -- CONDICIONAL: É um jogador? (Inicia o ataque se houver matéria selecionada)
+        -- CONDICIONAL: É um jogador?
         if model and model:FindFirstChild("Humanoid") then
             local tPlayer = Players:GetPlayerFromCharacter(model)
 
@@ -186,7 +200,7 @@ tool.Activated:Connect(function()
                 end
             end
         else
-            -- CONDICIONAL: É um objeto/veículo (Adiciona à tabela de alvos secundários)
+            -- CONDICIONAL: É um objeto/veículo
             local alvoFisico = nil
             local modeloVeiculo = hitPart:FindFirstAncestorOfClass("Model") or hitPart
 
@@ -201,14 +215,33 @@ tool.Activated:Connect(function()
             end
 
             if alvoFisico then
-                -- Evita duplicar o mesmo objeto se clicar nele duas vezes
                 if not table.find(objetosSelecionados, alvoFisico) then
                     table.insert(objetosSelecionados, alvoFisico)
                     print("➕ MATÉRIA ADICIONADA: " .. alvoFisico.Name .. " (Total: " .. #objetosSelecionados .. ")")
                     tool.Name = "DESTROY " .. #objetosSelecionados
+
+                    -- [CORREÇÃO DE INSTÂNCIA EXCLUSIVA]: Procura o assento apenas dentro do modelo isolado que você clicou
+                    local assentoEncontrado = nil
+                    if modeloVeiculo then
+                        assentoEncontrado = modeloVeiculo:FindFirstChildOfClass("VehicleSeat") or modeloVeiculo:FindFirstChild("PilotSeat", true)
+                    end
+                    
+                    -- Se o objeto não for um modelo direto mas fizer parte da hierarquia de Helicópteros, isola o pai correto
+                    if not assentoEncontrado and hitPart:FindFirstAncestor("Helicopters") then
+                        local modeloPaiDireto = hitPart:FindFirstAncestor("ChinookRescue") or hitPart.Parent
+                        if modeloPaiDireto then
+                            assentoEncontrado = modeloPaiDireto:FindFirstChild("PilotSeat", true) or modeloPaiDireto:FindFirstChildOfClass("VehicleSeat")
+                        end
+                    end
+
+                    -- Se encontrou o assento pertencente unicamente àquela cópia, executa o bypass
+                    if assentoEncontrado and assentoEncontrado:IsA("BasePart") then
+                        executarBypassNetworkOwnership(assentoEncontrado)
+                    else
+                        warn("⚠ Objeto selecionado, mas o assento específico desta instância não foi localizado.")
+                    end
                 end
             else
-                -- Clique no mapa vazio ou objeto ancorado reseta a lista
                 print("♻️ Seleção limpa.")
                 objetosSelecionados = {}
                 tool.Name = "SELECT MATTER V3"
