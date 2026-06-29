@@ -1,4 +1,4 @@
--- [[ PROJETO KILL V3 - MULTI-SELECTION (FORCE INJECTED - OMNI ORBIT) ]] --
+-- [[ PROJETO KILL V4 - MULTI-SELECTION (FORCE INJECTED - OMNI ORBIT) ]] --
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -27,7 +27,7 @@ end
 
 -- --- CRIAÇÃO DA TOOL ---
 local tool = Instance.new("Tool")
-tool.Name = "SELECT MATTER V3"
+tool.Name = "SELECT MATTER V4"
 tool.RequiresHandle = false
 tool.Parent = lp:WaitForChild("Backpack")
 
